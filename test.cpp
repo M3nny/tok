@@ -1,10 +1,15 @@
 #include <iostream>
 #include <string>
-#include "tokenizer.h"
+#include "tokenizer.hpp"
+
 
 int main() {
-    utf8proc_uint8_t str[] = "HèLlO HòW Arè YòU";
-
     tokenizer tokenizer;
-    printf("%s\n", tokenizer.normalize(str));
+    std::string str = "HèLlO HòW Arè YòU dOìng?";
+    std::string str2 = "hello how are you?";
+    std::string str_norm = tokenizer.normalize(str);
+
+
+    std::cout << "original:\t" << str << std::endl;
+    std::cout << "normalized:\t" << str_norm << std::endl;
 }

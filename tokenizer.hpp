@@ -4,7 +4,7 @@
 class tokenizer {
 public:
     tokenizer();
-    utf8proc_uint8_t* normalize(utf8proc_uint8_t str[]);
+    std::string normalize(std::string str);
 private:
     int normalize_opts;
 };
