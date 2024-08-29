@@ -31,8 +31,8 @@ std::string tokenizer::normalize(const std::string& str, bool strip_whitespaces)
     free(fold_str);
 
     if (strip_whitespaces) {
-        std::regex space_regex(R"(\s+)");
-        norm_str = std::regex_replace(norm_str, space_regex, " ");
+        std::regex whitespace_regex(R"(\s+)");
+        norm_str = std::regex_replace(norm_str, whitespace_regex, " ");
     }
     return norm_str;
 }
@@ -40,11 +40,15 @@ std::string tokenizer::normalize(const std::string& str, bool strip_whitespaces)
 std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str) const {
     std::vector<token> tokens;
     std::string norm_str = this->normalize(str);
-    std::regex token_regex(R"(\w+|[.,:;?!])");
+
+    // matches an alphanumeric word, preceded or not by a whitespace
+    // or a punctuation character
+    std::regex token_regex(R"(\s?\w+|[.,:;?!-_'"<>()[\]{}])");
 
     for (std::sregex_iterator iter(norm_str.begin(), norm_str.end(), token_regex); iter != std::sregex_iterator(); iter++) {
         std::smatch match = *iter;
         std::string token = match.str();
+        if (token.at(0) == ' ') token.replace(0, 1, "Ķ");
         int start = match.position();
         int end = start + match.length();
         tokens.push_back(tokenizer::token(token, start, end));
