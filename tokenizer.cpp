@@ -60,7 +60,7 @@ std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str) co
     for (std::sregex_iterator iter(norm_str.begin(), norm_str.end(), token_regex); iter != std::sregex_iterator(); iter++) {
         std::smatch match = *iter;
         std::string token = match.str();
-        if (token.at(0) == ' ') token.replace(0, 1, "K"); // TODO: select a better special character
+        if (token.at(0) == ' ') token.replace(0, 1, "Ķ");
         int start = match.position();
         int end = start + match.length();
         tokens.push_back(tokenizer::token(token, start, end));
@@ -71,10 +71,26 @@ std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str) co
 
 std::vector<std::string> tokenizer::string2vec(const std::string& str) const {
     std::vector<std::string> vec_string;
-    vec_string.reserve(str.size());
+    auto it = str.begin();
 
-    for (char c : str)
-        vec_string.emplace_back(1, c); // constructs the object in place
+    while (it != str.end()) {
+        unsigned char current_char = *it;
+        int char_len = 0;
+
+        // find the number of bytes for the current char (max 4 in utf-8)
+        if ((current_char >> 7) == 0) {              // 1-byte char: 0xxxxxxx
+            char_len = 1;
+        } else if ((current_char >> 5) == 0b110) {   // 2-bytes char: 110xxxxx 10xxxxxx
+            char_len = 2;
+        } else if ((current_char >> 4) == 0b1110) {  // 3-bytes char: 1110xxxx 10xxxxxx 10xxxxxx
+            char_len = 3;
+        } else if ((current_char >> 3) == 0b11110) { // 4-bytes char: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+            char_len = 4;
+        }
+
+        vec_string.emplace_back(it, it+char_len); // constructs the object in place
+        std::advance(it, char_len);
+    }
 
     return vec_string;
 }
