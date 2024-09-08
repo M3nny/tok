@@ -2,6 +2,7 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <list>
 
 class tokenizer {
 public:
@@ -15,14 +16,6 @@ public:
         friend std::ostream& operator<<(std::ostream& out, const tokenizer::token& t);
     };
 
-    tokenizer();
-    std::string normalize(const std::string& str, bool strip_whitespaces = true) const;
-    std::vector<token> pre_tokenize(const std::string& str) const;
-    std::vector<std::pair<std::string, std::string>> train_bpe(const std::vector<token>& tokens, size_t n_merges) const;
-
-private:
-    size_t normalize_opts;
-
     class byte_pair {
     public:
         byte_pair();
@@ -33,5 +26,13 @@ private:
         };
         std::string first, second;
     };
-    std::vector<std::string> string2vec(const std::string& str) const;
+
+    tokenizer();
+    std::string normalize(const std::string& str, bool strip_whitespaces = true) const;
+    std::vector<token> pre_tokenize(const std::string& str) const;
+    std::vector<byte_pair> train_bpe(const std::vector<token>& tokens, size_t n_merges) const;
+
+private:
+    size_t normalize_opts;
+    std::list<std::string> string2vec(const std::string& str) const;
 };

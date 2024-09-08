@@ -1,5 +1,6 @@
 #include <string>
 #include <vector>
+#include <list>
 #include <regex>
 #include <unordered_map>
 #include "tokenizer.hpp"
@@ -16,6 +17,8 @@ std::ostream& operator<<(std::ostream& out, const tokenizer::token& t) {
 }
 
 // --- tokenizer::byte_pair ---
+tokenizer::byte_pair::byte_pair() : first(""), second("") {}
+
 tokenizer::byte_pair::byte_pair(std::string fst, std::string snd) : first(fst), second(snd) {}
 
 size_t tokenizer::byte_pair::hash::operator()(const byte_pair& bp) const {
@@ -69,8 +72,8 @@ std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str) co
     return tokens;
 }
 
-std::vector<std::string> tokenizer::string2vec(const std::string& str) const {
-    std::vector<std::string> vec_string;
+std::list <std::string> tokenizer::string2vec(const std::string& str) const {
+    std::list<std::string> vec_string;
     auto it = str.begin();
 
     while (it != str.end()) {
@@ -95,9 +98,9 @@ std::vector<std::string> tokenizer::string2vec(const std::string& str) const {
     return vec_string;
 }
 
-std::vector<std::pair<std::string, std::string>> tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_merges) const {
-    std::vector<std::vector<std::string>> splits;
-    std::vector<std::pair<std::string, std::string>> merge_rules;
+std::vector<tokenizer::byte_pair> tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_merges) const {
+    std::vector<std::list<std::string>> splits;
+    std::vector<tokenizer::byte_pair> merge_rules;
     std::unordered_map<byte_pair, size_t, byte_pair::hash> pairs_freqs;
 
 
@@ -106,9 +109,34 @@ std::vector<std::pair<std::string, std::string>> tokenizer::train_bpe(const std:
         splits.push_back(string2vec(token.value));
     }
 
-    for (const auto& split : splits)
-        for (size_t i = 0; i < split.size() - 1; i++)
-            pairs_freqs[tokenizer::byte_pair(split.at(i), split.at(i+1))]++;
+    for (size_t i = 0; i < n_merges; i++) {
+        size_t hi_freq = 0;
+        tokenizer::byte_pair new_rule;
+        for (const auto& split : splits) {
+            for (auto it = split.begin(); std::next(it) != split.end(); it++) {
+                tokenizer::byte_pair current_pair(*it, *std::next(it));
+                pairs_freqs[current_pair]++;
+                if (pairs_freqs[current_pair] > hi_freq) {
+                    hi_freq = pairs_freqs[current_pair];
+                    new_rule.first = current_pair.first;
+                    new_rule.second = current_pair.second;
+                }
+            }
+        }
+
+        for (auto& split : splits) {
+            for (auto it = split.begin(); std::next(it) != split.end();) {
+                if (*it == new_rule.first and *std::next(it) == new_rule.second) {
+                    *it = new_rule.first + new_rule.second;
+                    it = split.erase(std::next(it));
+                } else {
+                    it++;
+                }
+            }
+        }
+
+        merge_rules.push_back(new_rule);
+    }
 
     return merge_rules;
 }
