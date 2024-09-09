@@ -6,6 +6,8 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
+#include <mutex>
 #include "tokenizer.hpp"
 
 // --- tokenizer::token ---
@@ -130,15 +132,43 @@ void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_
         std::cout << "--- Merge " << i+1 << "/" << n_merges << " ---" << std::endl;
         size_t hi_freq = 0;
         tokenizer::byte_pair new_rule;
-        for (const auto& split : splits) {
-            for (auto it = split.begin(); std::next(it) != split.end(); it++) {
-                tokenizer::byte_pair current_pair(*it, *std::next(it));
-                pairs_freqs[current_pair]++;
-                if (pairs_freqs[current_pair] > hi_freq) {
-                    hi_freq = pairs_freqs[current_pair];
-                    new_rule.first = current_pair.first;
-                    new_rule.second = current_pair.second;
+        std::mutex freq_mutex;
+
+
+        size_t n_cores = std::thread::hardware_concurrency();
+        if (n_cores == 0) n_cores = 4;
+
+        auto chunk_lambda = [&](size_t start, size_t end) {
+            std::unordered_map<byte_pair, size_t, byte_pair::hash> chunk_freqs;
+            for (size_t i = start; i < end; i++) {
+                const auto& split = splits.at(i);
+                for (auto it = split.begin(); std::next(it) != split.end(); it++) {
+                    tokenizer::byte_pair current_pair(*it, *std::next(it));
+                    chunk_freqs[current_pair]++;
                 }
+            }
+
+            std::lock_guard<std::mutex> lock(freq_mutex); // releases lock when out of scope
+            for (const auto& pair_freq : chunk_freqs)
+                pairs_freqs[pair_freq.first] += pair_freq.second;
+        };
+
+        std::vector<std::thread> thread_pool;
+        thread_pool.reserve(n_cores);
+        size_t chunk_size = splits.size() / n_cores;
+
+        for (size_t chunk = 0; chunk < n_cores; chunk++) {
+            size_t start = chunk * chunk_size;
+            size_t end = (chunk == n_cores-1) ? splits.size() : start + chunk_size;
+            thread_pool.emplace_back(chunk_lambda, start, end);
+        }
+
+        for (auto& th : thread_pool) th.join();
+
+        for (const auto& pair_freq : pairs_freqs) {
+            if (pair_freq.second > hi_freq) {
+                hi_freq = pair_freq.second;
+                new_rule = pair_freq.first;
             }
         }
 
