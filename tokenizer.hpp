@@ -1,8 +1,8 @@
 #include <utf8proc.h>
-#include <string>
-#include <iostream>
 #include <vector>
 #include <list>
+#include <string>
+#include <iostream>
 
 class tokenizer {
 public:
@@ -29,7 +29,7 @@ public:
 
     tokenizer();
     std::string normalize(const std::string& str, bool strip_whitespaces = true) const;
-    std::vector<token> pre_tokenize(const std::string& str) const;
+    std::vector<token> pre_tokenize(const std::string& str, bool file_path = false) const;
     void train_bpe(const std::vector<token>& tokens, size_t n_merges);
 
 private:

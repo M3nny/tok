@@ -1,8 +1,11 @@
-#include <string>
 #include <vector>
 #include <list>
-#include <regex>
 #include <unordered_map>
+#include <string>
+#include <regex>
+#include <fstream>
+#include <sstream>
+#include <stdexcept>
 #include "tokenizer.hpp"
 
 // --- tokenizer::token ---
@@ -52,9 +55,22 @@ std::string tokenizer::normalize(const std::string& str, bool strip_whitespaces)
     return norm_str;
 }
 
-std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str) const {
+std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str, bool file_path) const {
     std::vector<token> tokens;
-    std::string norm_str = this->normalize(str);
+    std::string norm_str;
+
+    if (file_path) {
+        std::ifstream file(str);
+        if (!file.is_open()) {
+            throw std::runtime_error("Unable to open file: " + str);
+        }
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        std::string file_content = buffer.str();
+        norm_str = this->normalize(file_content);
+    } else {
+        norm_str = this->normalize(str);
+    }
 
     // matches an alphanumeric word, preceded or not by a whitespace
     // or a punctuation character
@@ -101,6 +117,8 @@ std::list <std::string> tokenizer::string2vec(const std::string& str) const {
 void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_merges) {
     std::vector<std::list<std::string>> splits;
     std::unordered_map<byte_pair, size_t, byte_pair::hash> pairs_freqs;
+    splits.reserve(tokens.size());
+    this->merge_rules.reserve(n_merges);
 
     // initialize splits (e.g. "hi" -> "h", "i")
     for (const auto& token : tokens) {
@@ -108,6 +126,8 @@ void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_
     }
 
     for (size_t i = 0; i < n_merges; i++) {
+        pairs_freqs.reserve(tokens.size());
+        std::cout << "--- Merge " << i+1 << "/" << n_merges << " ---" << std::endl;
         size_t hi_freq = 0;
         tokenizer::byte_pair new_rule;
         for (const auto& split : splits) {
