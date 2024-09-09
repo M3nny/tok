@@ -98,11 +98,9 @@ std::list <std::string> tokenizer::string2vec(const std::string& str) const {
     return vec_string;
 }
 
-std::vector<tokenizer::byte_pair> tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_merges) const {
+void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_merges) {
     std::vector<std::list<std::string>> splits;
-    std::vector<tokenizer::byte_pair> merge_rules;
     std::unordered_map<byte_pair, size_t, byte_pair::hash> pairs_freqs;
-
 
     // initialize splits (e.g. "hi" -> "h", "i")
     for (const auto& token : tokens) {
@@ -135,8 +133,8 @@ std::vector<tokenizer::byte_pair> tokenizer::train_bpe(const std::vector<tokeniz
             }
         }
 
-        merge_rules.push_back(new_rule);
+        if (!new_rule.first.empty() and !new_rule.second.empty())
+            this->merge_rules.push_back(new_rule);
+        pairs_freqs.clear();
     }
-
-    return merge_rules;
 }

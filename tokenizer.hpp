@@ -30,9 +30,10 @@ public:
     tokenizer();
     std::string normalize(const std::string& str, bool strip_whitespaces = true) const;
     std::vector<token> pre_tokenize(const std::string& str) const;
-    std::vector<byte_pair> train_bpe(const std::vector<token>& tokens, size_t n_merges) const;
+    void train_bpe(const std::vector<token>& tokens, size_t n_merges);
 
 private:
     size_t normalize_opts;
+    std::vector<byte_pair> merge_rules;
     std::list<std::string> string2vec(const std::string& str) const;
 };
