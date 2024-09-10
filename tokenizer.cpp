@@ -44,6 +44,7 @@ void tokenizer::byte_pair::serialize(Archive& archive) {
 
 // --- tokenizer ---
 tokenizer::tokenizer() : normalize_opts(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_STRIPMARK | UTF8PROC_CASEFOLD) {}
+tokenizer::tokenizer(size_t opts) : normalize_opts(opts) {}
 
 std::string tokenizer::normalize(const std::string& str, bool strip_whitespaces) const {
     utf8proc_uint8_t* fold_str;
@@ -97,7 +98,7 @@ std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str, bo
     return tokens;
 }
 
-std::list<std::string> tokenizer::string2vec(const std::string& str) const {
+std::list<std::string> tokenizer::string2list(const std::string& str) const {
     std::list<std::string> vec_string;
     auto it = str.begin();
 
@@ -158,7 +159,7 @@ void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_
     for (const auto& token : tokens) {
         if (seen_tokens.count(token.value) == 0) {
             seen_tokens.insert(token.value);
-            splits.push_back(string2vec(token.value));
+            splits.push_back(string2list(token.value));
         }
     }
 
@@ -217,6 +218,10 @@ void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_
             this->merge_rules.push_back(new_rule);
         pairs_freqs.clear();
     }
+}
+
+const std::vector<tokenizer::byte_pair>& tokenizer::get_merge_rules() const {
+    return merge_rules;
 }
 
 template <class Archive>

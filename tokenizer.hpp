@@ -41,9 +41,12 @@ public:
     };
 
     tokenizer();
+    tokenizer(size_t opts);
     std::string normalize(const std::string& str, bool strip_whitespaces = true) const;
     std::vector<token> pre_tokenize(const std::string& str, bool file_path = false) const;
+
     void train_bpe(const std::vector<token>& tokens, size_t n_merges);
+    const std::vector<byte_pair>& get_merge_rules() const;
     void save(const std::string& filename) const;
     void load(const std::string& filename);
 
@@ -53,7 +56,7 @@ public:
 private:
     friend class cereal::access; // allow cereal to access private fields
 
-    std::list<std::string> string2vec(const std::string& str) const;
+    std::list<std::string> string2list(const std::string& str) const;
     void parallel_splits_func(std::vector<std::list<std::string>>& splits, const std::function<void(size_t, size_t)>& func);
 
     size_t normalize_opts;

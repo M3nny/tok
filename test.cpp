@@ -4,6 +4,8 @@
 
 int main() {
     tokenizer tokenizer;
-    auto tokens = tokenizer.pre_tokenize("corpus.txt", true);
-    tokenizer.train_bpe(tokens, 20);
+    tokenizer.load("pretrained/eng_adjectives_adverbs.bin");
+    for (auto rule : tokenizer.get_merge_rules()) {
+        std::cout << rule.first << " + " << rule.second << std::endl;
+    }
 }
