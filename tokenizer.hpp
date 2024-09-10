@@ -3,6 +3,7 @@
 #include <list>
 #include <string>
 #include <iostream>
+#include <functional>
 
 class tokenizer {
 public:
@@ -36,4 +37,5 @@ private:
     size_t normalize_opts;
     std::vector<byte_pair> merge_rules;
     std::list<std::string> string2vec(const std::string& str) const;
+    void parallel_splits_func(std::vector<std::list<std::string>>& splits, const std::function<void(size_t, size_t)>& func);
 };

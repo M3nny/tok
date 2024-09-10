@@ -1,6 +1,7 @@
 #include <vector>
 #include <list>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <regex>
 #include <fstream>
@@ -8,6 +9,7 @@
 #include <stdexcept>
 #include <thread>
 #include <mutex>
+#include <functional>
 #include "tokenizer.hpp"
 
 // --- tokenizer::token ---
@@ -90,7 +92,7 @@ std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str, bo
     return tokens;
 }
 
-std::list <std::string> tokenizer::string2vec(const std::string& str) const {
+std::list<std::string> tokenizer::string2vec(const std::string& str) const {
     std::list<std::string> vec_string;
     auto it = str.begin();
 
@@ -116,15 +118,43 @@ std::list <std::string> tokenizer::string2vec(const std::string& str) const {
     return vec_string;
 }
 
+void tokenizer::parallel_splits_func(std::vector<std::list<std::string>>& splits, const std::function<void(size_t, size_t)>& func) {
+    size_t n_cores = std::thread::hardware_concurrency();
+    if (n_cores == 0) n_cores = 4;
+
+    // there will be n_cores chunks (and threads) to maximize parallelism
+    std::vector<std::thread> thread_pool;
+    thread_pool.reserve(n_cores);
+    size_t chunk_size = splits.size() / n_cores;
+
+    if (chunk_size == 0) { // the corpus is too short, creating threads will be useless
+        func(0, splits.size());
+    } else {
+        for (size_t chunk = 0; chunk < n_cores; chunk++) {
+            size_t start = chunk * chunk_size;
+            size_t end = (chunk == n_cores-1) ? splits.size() : start + chunk_size;
+            thread_pool.emplace_back(func, start, end);
+        }
+        for (auto& th : thread_pool) th.join();
+    }
+}
+
 void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_merges) {
     std::vector<std::list<std::string>> splits;
     std::unordered_map<byte_pair, size_t, byte_pair::hash> pairs_freqs;
+    std::unordered_set<std::string> seen_tokens; // avoids duplicate tokens thus making the corpus smaller
+    std::mutex freq_mutex;
+
     splits.reserve(tokens.size());
+    seen_tokens.reserve(tokens.size()/4);
     this->merge_rules.reserve(n_merges);
 
     // initialize splits (e.g. "hi" -> "h", "i")
     for (const auto& token : tokens) {
-        splits.push_back(string2vec(token.value));
+        if (seen_tokens.count(token.value) == 0) {
+            seen_tokens.insert(token.value);
+            splits.push_back(string2vec(token.value));
+        }
     }
 
     for (size_t i = 0; i < n_merges; i++) {
@@ -132,16 +162,13 @@ void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_
         std::cout << "--- Merge " << i+1 << "/" << n_merges << " ---" << std::endl;
         size_t hi_freq = 0;
         tokenizer::byte_pair new_rule;
-        std::mutex freq_mutex;
 
 
-        size_t n_cores = std::thread::hardware_concurrency();
-        if (n_cores == 0) n_cores = 4;
-
-        auto chunk_lambda = [&](size_t start, size_t end) {
+        // lambda used for counting the frequencies of byte-pairs on each chunk
+        auto count_bp_frequency = [&](size_t start, size_t end) {
             std::unordered_map<byte_pair, size_t, byte_pair::hash> chunk_freqs;
-            for (size_t i = start; i < end; i++) {
-                const auto& split = splits.at(i);
+            for (size_t j = start; j < end; j++) {
+                const auto& split = splits.at(j);
                 for (auto it = split.begin(); std::next(it) != split.end(); it++) {
                     tokenizer::byte_pair current_pair(*it, *std::next(it));
                     chunk_freqs[current_pair]++;
@@ -153,18 +180,9 @@ void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_
                 pairs_freqs[pair_freq.first] += pair_freq.second;
         };
 
-        std::vector<std::thread> thread_pool;
-        thread_pool.reserve(n_cores);
-        size_t chunk_size = splits.size() / n_cores;
+        parallel_splits_func(splits, count_bp_frequency);
 
-        for (size_t chunk = 0; chunk < n_cores; chunk++) {
-            size_t start = chunk * chunk_size;
-            size_t end = (chunk == n_cores-1) ? splits.size() : start + chunk_size;
-            thread_pool.emplace_back(chunk_lambda, start, end);
-        }
-
-        for (auto& th : thread_pool) th.join();
-
+        // after computing each chunk's byte-pairs frequencies, we look for the highest one
         for (const auto& pair_freq : pairs_freqs) {
             if (pair_freq.second > hi_freq) {
                 hi_freq = pair_freq.second;
@@ -172,17 +190,24 @@ void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_
             }
         }
 
-        for (auto& split : splits) {
-            for (auto it = split.begin(); std::next(it) != split.end();) {
-                if (*it == new_rule.first and *std::next(it) == new_rule.second) {
-                    *it = new_rule.first + new_rule.second;
-                    it = split.erase(std::next(it));
-                } else {
-                    it++;
+        // lambda used for applying the new merge rule on each chunk
+        const std::function<void(size_t, size_t)> apply_merge_rule = [&](size_t start, size_t end) {
+            for (size_t j = start; j < end; j++) {
+                auto& split = splits.at(j);
+                for (auto it = split.begin(); std::next(it) != split.end();) {
+                    if (*it == new_rule.first and *std::next(it) == new_rule.second) {
+                        *it = new_rule.first + new_rule.second;
+                        it = split.erase(std::next(it));
+                    } else {
+                        it++;
+                    }
                 }
             }
-        }
+        };
 
+        parallel_splits_func(splits, apply_merge_rule);
+
+        // the new merge rule is stored and the byte-pair frequencies are reset
         if (!new_rule.first.empty() and !new_rule.second.empty())
             this->merge_rules.push_back(new_rule);
         pairs_freqs.clear();
