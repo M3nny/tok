@@ -10,6 +10,7 @@
 #include <thread>
 #include <mutex>
 #include <functional>
+
 #include "tokenizer.hpp"
 
 // --- tokenizer::token ---
@@ -34,6 +35,11 @@ size_t tokenizer::byte_pair::hash::operator()(const byte_pair& bp) const {
 
 bool tokenizer::byte_pair::operator==(const byte_pair &that) const {
     return this->first == that.first && this->second == that.second;
+}
+
+template <class Archive>
+void tokenizer::byte_pair::serialize(Archive& archive) {
+    archive(first, second);
 }
 
 // --- tokenizer ---
@@ -64,12 +70,11 @@ std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str, bo
     std::string norm_str;
 
     if (file_path) {
-        std::ifstream file(str);
-        if (!file.is_open()) {
-            throw std::runtime_error("Unable to open file: " + str);
-        }
+        std::ifstream ifs(str);
+        if (!ifs.is_open()) throw std::runtime_error("Unable to read file: " + str);
+
         std::stringstream buffer;
-        buffer << file.rdbuf();
+        buffer << ifs.rdbuf();
         std::string file_content = buffer.str();
         norm_str = this->normalize(file_content);
     } else {
@@ -165,7 +170,7 @@ void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_
 
 
         // lambda used for counting the frequencies of byte-pairs on each chunk
-        auto count_bp_frequency = [&](size_t start, size_t end) {
+        const std::function<void(size_t, size_t)> count_bp_frequency = [&](size_t start, size_t end) {
             std::unordered_map<byte_pair, size_t, byte_pair::hash> chunk_freqs;
             for (size_t j = start; j < end; j++) {
                 const auto& split = splits.at(j);
@@ -212,4 +217,27 @@ void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_
             this->merge_rules.push_back(new_rule);
         pairs_freqs.clear();
     }
+}
+
+template <class Archive>
+void tokenizer::serialize(Archive& archive) {
+    archive(normalize_opts, merge_rules);
+}
+
+void tokenizer::save(const std::string& filename) const {
+    std::ofstream ofs(filename, std::ios::binary);
+    if (!ofs.is_open()) throw std::runtime_error("Unable to write file: " + filename);
+
+    // tracks the endianness
+    cereal::PortableBinaryOutputArchive oarchive(ofs);
+    oarchive(*this);
+}
+
+void tokenizer::load(const std::string& filename) {
+    std::ifstream ifs(filename, std::ios::binary);
+    if (!ifs.is_open()) throw std::runtime_error("Unable to read file: " + filename);
+
+    // tracks the endianness
+    cereal::PortableBinaryInputArchive iarchive(ifs);
+    iarchive(*this);
 }
