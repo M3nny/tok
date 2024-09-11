@@ -13,10 +13,10 @@
 
 #include "tokenizer.hpp"
 
-// --- tokenizer::token ---
-tokenizer::token::token(std::string str, size_t start, size_t end) : value(str), start(start), end(end) {}
+// --- tokenizer::word ---
+tokenizer::word::word(std::string str, size_t start, size_t end) : value(str), start(start), end(end) {}
 
-std::ostream& operator<<(std::ostream& out, const tokenizer::token& t) {
+std::ostream& operator<<(std::ostream& out, const tokenizer::word& t) {
     out << "("
         << "\"" << t.value << "\", "
         << "("  << t.start << ", " << t.end << ")"
@@ -43,8 +43,8 @@ void tokenizer::byte_pair::serialize(Archive& archive) {
 }
 
 // --- tokenizer ---
-tokenizer::tokenizer() : special_char("Ķ"), normalize_opts(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_STRIPMARK | UTF8PROC_CASEFOLD) {}
-tokenizer::tokenizer(std::string spec_char, size_t opts) : special_char(spec_char), normalize_opts(opts) {}
+tokenizer::tokenizer() : leading_white_space("Ķ"), endoftext("<|eot|>"), normalize_opts(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_STRIPMARK | UTF8PROC_CASEFOLD) {}
+tokenizer::tokenizer(std::string lead_ws, std::string eot, size_t opts) : leading_white_space(lead_ws), endoftext(eot), normalize_opts(opts) {}
 
 std::string tokenizer::normalize(const std::string& str, bool strip_whitespaces) const {
     utf8proc_uint8_t* fold_str;
@@ -66,8 +66,8 @@ std::string tokenizer::normalize(const std::string& str, bool strip_whitespaces)
     return norm_str;
 }
 
-std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str, bool is_file_path) const {
-    std::vector<token> tokens;
+std::vector<tokenizer::word> tokenizer::pre_tokenize(const std::string& str, bool is_file_path) const {
+    std::vector<tokenizer::word> tokens;
     std::string norm_str;
 
     if (is_file_path) {
@@ -91,10 +91,10 @@ std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str, bo
         std::string token = match.str();
 
         // if a word is preceded by a white space it is replaced by a special character
-        if (token.at(0) == ' ') token.replace(0, 1, this->special_char);
+        if (token.at(0) == ' ') token.replace(0, 1, this->leading_white_space);
         int start = match.position();
         int end = start + match.length();
-        tokens.push_back(tokenizer::token(token, start, end));
+        tokens.push_back(tokenizer::word(token, start, end));
     }
 
     return tokens;
@@ -167,8 +167,19 @@ std::string tokenizer::decode(size_t id) const {
     return result;
 }
 
+void tokenizer::fill_basic_vocab() {
+    // fills the vocabulary with characters from ascii (32 - 126)
+    for (size_t i = 32; i <= 126; i++) {
+        std::string single_char_str(1, static_cast<char>(i));
+        this->vocab[single_char_str] = tokenizer::encode(single_char_str);
+    }
+    this->vocab[leading_white_space] = this->encode(leading_white_space);
+    this->vocab[endoftext] = this->encode(endoftext);
+}
+
 void tokenizer::train_bpe(const std::string& corpus, size_t n_merges, bool is_file_path) {
-    std::vector<tokenizer::token> tokens = this->pre_tokenize(corpus, is_file_path);
+    std::vector<tokenizer::word> tokens = this->pre_tokenize(corpus, is_file_path);
+    this->fill_basic_vocab();
 
     std::vector<std::list<std::string>> splits;
     std::unordered_map<byte_pair, size_t, byte_pair::hash> pairs_freqs;
@@ -180,7 +191,7 @@ void tokenizer::train_bpe(const std::string& corpus, size_t n_merges, bool is_fi
     this->merges.reserve(n_merges);
 
     // initialize splits (e.g. "hi" -> "h", "i")
-    for (const tokenizer::token& token : tokens) {
+    for (const tokenizer::word& token : tokens) {
         if (seen_tokens.count(token.value) == 0) {
             seen_tokens.insert(token.value);
             splits.push_back(string2list(token.value));
@@ -256,12 +267,13 @@ const std::vector<tokenizer::byte_pair>& tokenizer::get_merges() const {
 }
 
 std::vector<std::string> tokenizer::tokenize(const std::string& str) const {
-    std::vector<tokenizer::token> tokens = this->pre_tokenize(str);
+    std::vector<tokenizer::word> tokens = this->pre_tokenize(str);
     std::vector<std::list<std::string>> splits;
     splits.reserve(tokens.size());
 
-    for (const tokenizer::token& token : tokens)
+    for (const tokenizer::word& token : tokens) {
         splits.push_back(string2list(token.value));
+    }
 
     // lambda used for applying every merge rule on each chunk
     const std::function<void(size_t, size_t)> apply_merge_rules = [&](size_t start, size_t end) {
@@ -285,13 +297,27 @@ std::vector<std::string> tokenizer::tokenize(const std::string& str) const {
     for (const std::list<std::string>& split : splits)
         tokenized_str.insert(tokenized_str.end(), split.begin(), split.end());
 
-    tokenized_str.push_back("<|endoftext|>");
+    tokenized_str.push_back(this->endoftext);
     return tokenized_str;
+}
+
+std::vector<size_t> tokenizer::tokens_to_ids(const std::vector<std::string>& tokens) const {
+    std::vector<size_t> ids;
+    for (const std::string& str : tokens)
+        ids.emplace_back(this->vocab.at(str));
+    return ids;
+}
+
+std::vector<std::string> tokenizer::ids_to_tokens(const std::vector<size_t>& ids) const{
+    std::vector<std::string> tokens;
+    for (const size_t& id : ids)
+        tokens.emplace_back(tokenizer::decode(id));
+    return tokens;
 }
 
 template <class Archive>
 void tokenizer::serialize(Archive& archive) {
-    archive(special_char, normalize_opts, vocab, merges);
+    archive(leading_white_space, endoftext, normalize_opts, vocab, merges);
 }
 
 void tokenizer::save(const std::string& filename) const {
