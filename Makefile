@@ -1,5 +1,5 @@
 # compiler
-CC = g++
+CC = g++ -std=c++11
 
 # compiler flags
 CFLAGS = -I include/utf8proc -I include/cereal/include
