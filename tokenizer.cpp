@@ -66,11 +66,11 @@ std::string tokenizer::normalize(const std::string& str, bool strip_whitespaces)
     return norm_str;
 }
 
-std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str, bool file_path) const {
+std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str, bool is_file_path) const {
     std::vector<token> tokens;
     std::string norm_str;
 
-    if (file_path) {
+    if (is_file_path) {
         std::ifstream ifs(str);
         if (!ifs.is_open()) throw std::runtime_error("Unable to read file: " + str);
 
@@ -89,7 +89,9 @@ std::vector<tokenizer::token> tokenizer::pre_tokenize(const std::string& str, bo
     for (std::sregex_iterator iter(norm_str.begin(), norm_str.end(), token_regex); iter != std::sregex_iterator(); iter++) {
         std::smatch match = *iter;
         std::string token = match.str();
-        if (token.at(0) == ' ') token.replace(0, 1, this->special_char); // puts a special char at the start of each word
+
+        // if a word is preceded by a white space it is replaced by a special character
+        if (token.at(0) == ' ') token.replace(0, 1, this->special_char);
         int start = match.position();
         int end = start + match.length();
         tokens.push_back(tokenizer::token(token, start, end));
@@ -145,7 +147,9 @@ void tokenizer::parallel_splits_func(std::vector<std::list<std::string>>& splits
     }
 }
 
-void tokenizer::train_bpe(const std::vector<tokenizer::token>& tokens, size_t n_merges) {
+void tokenizer::train_bpe(const std::string& corpus, size_t n_merges, bool is_file_path) {
+    std::vector<tokenizer::token> tokens = this->pre_tokenize(corpus, is_file_path);
+
     std::vector<std::list<std::string>> splits;
     std::unordered_map<byte_pair, size_t, byte_pair::hash> pairs_freqs;
     std::unordered_set<std::string> seen_tokens; // avoids duplicate tokens thus making the corpus smaller
@@ -251,12 +255,8 @@ std::vector<std::string> tokenizer::tokenize(const std::string& str) const {
 
     this->parallel_splits_func(splits, apply_merge_rules);
     std::vector<std::string> tokenized_str;
-    for (const std::list<std::string>& split : splits) {
-        std::string merged_splits;
-        for (const std::string& piece : split) {
-            tokenized_str.push_back(piece);
-        }
-    }
+    for (const std::list<std::string>& split : splits)
+        tokenized_str.insert(tokenized_str.end(), split.begin(), split.end());
 
     tokenized_str.push_back("<|endoftext|>");
     return tokenized_str;

@@ -43,9 +43,9 @@ public:
     tokenizer();
     tokenizer(std::string spec_char, size_t opts);
     std::string normalize(const std::string& str, bool strip_whitespaces = true) const;
-    std::vector<token> pre_tokenize(const std::string& str, bool file_path = false) const;
+    std::vector<token> pre_tokenize(const std::string& str, bool is_file_path = false) const;
 
-    void train_bpe(const std::vector<token>& tokens, size_t n_merges);
+    void train_bpe(const std::string& corpus, size_t n_merges, bool is_file_path = false);
     const std::vector<byte_pair>& get_merge_rules() const;
     std::vector<std::string> tokenize(const std::string& str) const;
     void save(const std::string& filename) const;
