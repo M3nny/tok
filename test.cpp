@@ -1,10 +1,10 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include "tokenizer.hpp"
+#include "tok.hpp"
 
 int main() {
-    tokenizer tokenizer;
+    tok tokenizer;
     tokenizer.train_bpe("corpus.txt", 20, true);
     tokenizer.save("pretrained/eng_adjectives_adverbs.bin");
 }

@@ -8,7 +8,7 @@ CFLAGS = -I include/utf8proc -I include/cereal/include
 LDFLAGS = -L include/utf8proc/build -l utf8proc
 
 # source files
-SRCS = test.cpp tokenizer.cpp
+SRCS = test.cpp tok.cpp
 
 # object files (same names as sources but with .o extension)
 OBJS = $(SRCS:.cpp=.o)

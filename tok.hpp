@@ -12,10 +12,10 @@
 #include <iostream>
 #include <functional>
 
-class tokenizer {
+class tok {
 public:
     /*
-    * This class is used to store and lookup the result of tokenizer::pre_tokenize
+    * This class is used to store and lookup the result of tok::pre_tokenize
     * a word represent a string isolted by space and/or punctuation marks by printing a word
     * it will be shown its value followed by its starting and ending indexes in the normalized corpus
     */
@@ -24,7 +24,7 @@ public:
         word();
         word(std::string str, size_t start, size_t end);
 
-        friend std::ostream& operator<<(std::ostream& out, const tokenizer::word& t);
+        friend std::ostream& operator<<(std::ostream& out, const tok::word& t);
 
         const std::string value;
         const size_t start, end;
@@ -53,8 +53,8 @@ public:
         void serialize(Archive& archive);
     };
 
-    tokenizer();
-    tokenizer(std::string lead_ws, std::string eot, size_t opts);
+    tok();
+    tok(std::string lead_ws, std::string eot, size_t opts);
 
     // Normalizes a string by lower-casing it, removing accents, and stripping excessive white spaces
     std::string normalize(const std::string& str, bool strip_whitespaces = true) const;

@@ -11,12 +11,12 @@
 #include <mutex>
 #include <functional>
 
-#include "tokenizer.hpp"
+#include "tok.hpp"
 
-// --- tokenizer::word ---
-tokenizer::word::word(std::string str, size_t start, size_t end) : value(str), start(start), end(end) {}
+// --- tok::word ---
+tok::word::word(std::string str, size_t start, size_t end) : value(str), start(start), end(end) {}
 
-std::ostream& operator<<(std::ostream& out, const tokenizer::word& t) {
+std::ostream& operator<<(std::ostream& out, const tok::word& t) {
     out << "("
         << "\"" << t.value << "\", "
         << "("  << t.start << ", " << t.end << ")"
@@ -24,29 +24,29 @@ std::ostream& operator<<(std::ostream& out, const tokenizer::word& t) {
     return out;
 }
 
-// --- tokenizer::byte_pair ---
-tokenizer::byte_pair::byte_pair() : first(""), second("") {}
+// --- tok::byte_pair ---
+tok::byte_pair::byte_pair() : first(""), second("") {}
 
-tokenizer::byte_pair::byte_pair(std::string fst, std::string snd) : first(fst), second(snd) {}
+tok::byte_pair::byte_pair(std::string fst, std::string snd) : first(fst), second(snd) {}
 
-size_t tokenizer::byte_pair::hash::operator()(const byte_pair& bp) const {
+size_t tok::byte_pair::hash::operator()(const byte_pair& bp) const {
     return std::hash<std::string>()(std::string(bp.first + bp.second));
 }
 
-bool tokenizer::byte_pair::operator==(const byte_pair &that) const {
+bool tok::byte_pair::operator==(const byte_pair &that) const {
     return this->first == that.first && this->second == that.second;
 }
 
 template <class Archive>
-void tokenizer::byte_pair::serialize(Archive& archive) {
+void tok::byte_pair::serialize(Archive& archive) {
     archive(first, second);
 }
 
-// --- tokenizer ---
-tokenizer::tokenizer() : leading_white_space("Ķ"), endoftext("<|eot|>"), normalize_opts(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_STRIPMARK | UTF8PROC_CASEFOLD) {}
-tokenizer::tokenizer(std::string lead_ws, std::string eot, size_t opts) : leading_white_space(lead_ws), endoftext(eot), normalize_opts(opts) {}
+// --- tok ---
+tok::tok() : leading_white_space("Ķ"), endoftext("<|eot|>"), normalize_opts(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_STRIPMARK | UTF8PROC_CASEFOLD) {}
+tok::tok(std::string lead_ws, std::string eot, size_t opts) : leading_white_space(lead_ws), endoftext(eot), normalize_opts(opts) {}
 
-std::string tokenizer::normalize(const std::string& str, bool strip_whitespaces) const {
+std::string tok::normalize(const std::string& str, bool strip_whitespaces) const {
     utf8proc_uint8_t* fold_str;
 
     utf8proc_map(
@@ -66,8 +66,8 @@ std::string tokenizer::normalize(const std::string& str, bool strip_whitespaces)
     return norm_str;
 }
 
-std::vector<tokenizer::word> tokenizer::pre_tokenize(const std::string& str, bool is_file_path) const {
-    std::vector<tokenizer::word> tokens;
+std::vector<tok::word> tok::pre_tokenize(const std::string& str, bool is_file_path) const {
+    std::vector<tok::word> tokens;
     std::string norm_str;
 
     if (is_file_path) {
@@ -94,13 +94,13 @@ std::vector<tokenizer::word> tokenizer::pre_tokenize(const std::string& str, boo
         if (token.at(0) == ' ') token.replace(0, 1, this->leading_white_space);
         int start = match.position();
         int end = start + match.length();
-        tokens.push_back(tokenizer::word(token, start, end));
+        tokens.push_back(tok::word(token, start, end));
     }
 
     return tokens;
 }
 
-std::list<std::string> tokenizer::string2list(const std::string& str) const {
+std::list<std::string> tok::string2list(const std::string& str) const {
     std::list<std::string> vec_string;
     auto it = str.begin();
 
@@ -126,7 +126,7 @@ std::list<std::string> tokenizer::string2list(const std::string& str) const {
     return vec_string;
 }
 
-void tokenizer::parallel_splits_func(std::vector<std::list<std::string>>& splits, const std::function<void(size_t, size_t)>& func) const {
+void tok::parallel_splits_func(std::vector<std::list<std::string>>& splits, const std::function<void(size_t, size_t)>& func) const {
     size_t n_cores = std::thread::hardware_concurrency();
     if (n_cores == 0) n_cores = 1;
 
@@ -147,7 +147,7 @@ void tokenizer::parallel_splits_func(std::vector<std::list<std::string>>& splits
     }
 }
 
-size_t tokenizer::encode(const std::string& str) const {
+size_t tok::encode(const std::string& str) const {
     size_t encoded_str = 0;
     for (char c : str) {
         // appends each byte of the input string
@@ -156,7 +156,7 @@ size_t tokenizer::encode(const std::string& str) const {
     return encoded_str;
 }
 
-std::string tokenizer::decode(size_t id) const {
+std::string tok::decode(size_t id) const {
     std::string result;
     while (id > 0) {
         // prepends each byte to the result string
@@ -167,18 +167,18 @@ std::string tokenizer::decode(size_t id) const {
     return result;
 }
 
-void tokenizer::fill_basic_vocab() {
+void tok::fill_basic_vocab() {
     // fills the vocabulary with characters from ascii (32 - 126)
     for (size_t i = 32; i <= 126; i++) {
         std::string single_char_str(1, static_cast<char>(i));
-        this->vocab[single_char_str] = tokenizer::encode(single_char_str);
+        this->vocab[single_char_str] = tok::encode(single_char_str);
     }
     this->vocab[leading_white_space] = this->encode(leading_white_space);
     this->vocab[endoftext] = this->encode(endoftext);
 }
 
-void tokenizer::train_bpe(const std::string& corpus, size_t n_merges, bool is_file_path) {
-    std::vector<tokenizer::word> tokens = this->pre_tokenize(corpus, is_file_path);
+void tok::train_bpe(const std::string& corpus, size_t n_merges, bool is_file_path) {
+    std::vector<tok::word> tokens = this->pre_tokenize(corpus, is_file_path);
     this->fill_basic_vocab();
 
     std::vector<std::list<std::string>> splits;
@@ -191,7 +191,7 @@ void tokenizer::train_bpe(const std::string& corpus, size_t n_merges, bool is_fi
     this->merges.reserve(n_merges);
 
     // initialize splits (e.g. "hi" -> "h", "i")
-    for (const tokenizer::word& token : tokens) {
+    for (const tok::word& token : tokens) {
         if (seen_tokens.count(token.value) == 0) {
             seen_tokens.insert(token.value);
             splits.push_back(string2list(token.value));
@@ -202,7 +202,7 @@ void tokenizer::train_bpe(const std::string& corpus, size_t n_merges, bool is_fi
         pairs_freqs.reserve(tokens.size());
         std::cout << "--- Merge " << i+1 << "/" << n_merges << " ---" << std::endl;
         size_t hi_freq = 0;
-        tokenizer::byte_pair new_rule;
+        tok::byte_pair new_rule;
 
 
         // lambda used for counting the frequencies of byte-pairs on each chunk
@@ -211,7 +211,7 @@ void tokenizer::train_bpe(const std::string& corpus, size_t n_merges, bool is_fi
             for (size_t j = start; j < end; j++) {
                 const std::list<std::string>& split = splits.at(j);
                 for (auto it = split.begin(); std::next(it) != split.end(); it++) {
-                    tokenizer::byte_pair current_pair(*it, *std::next(it));
+                    tok::byte_pair current_pair(*it, *std::next(it));
                     chunk_freqs[current_pair]++;
                 }
             }
@@ -251,27 +251,27 @@ void tokenizer::train_bpe(const std::string& corpus, size_t n_merges, bool is_fi
         // the new merge rule is stored and the byte-pair frequencies are reset
         if (!new_rule.first.empty() and !new_rule.second.empty()) {
             std::string new_token = new_rule.first+new_rule.second;
-            this->vocab[new_token] = tokenizer::encode(new_token);
+            this->vocab[new_token] = tok::encode(new_token);
             this->merges.push_back(new_rule);
         }
         pairs_freqs.clear();
     }
 }
 
-const std::unordered_map<std::string, size_t>& tokenizer::get_vocab() const {
+const std::unordered_map<std::string, size_t>& tok::get_vocab() const {
     return vocab;
 }
 
-const std::vector<tokenizer::byte_pair>& tokenizer::get_merges() const {
+const std::vector<tok::byte_pair>& tok::get_merges() const {
     return merges;
 }
 
-std::vector<std::string> tokenizer::tokenize(const std::string& str) const {
-    std::vector<tokenizer::word> tokens = this->pre_tokenize(str);
+std::vector<std::string> tok::tokenize(const std::string& str) const {
+    std::vector<tok::word> tokens = this->pre_tokenize(str);
     std::vector<std::list<std::string>> splits;
     splits.reserve(tokens.size());
 
-    for (const tokenizer::word& token : tokens) {
+    for (const tok::word& token : tokens) {
         splits.push_back(string2list(token.value));
     }
 
@@ -279,7 +279,7 @@ std::vector<std::string> tokenizer::tokenize(const std::string& str) const {
     const std::function<void(size_t, size_t)> apply_merge_rules = [&](size_t start, size_t end) {
         for (size_t i = start; i < end; i++) {
             std::list<std::string>& split = splits.at(i);
-            for (const tokenizer::byte_pair& rule : this->merges) {
+            for (const tok::byte_pair& rule : this->merges) {
                 for (auto it = split.begin(); std::next(it) != split.end();) {
                     if (*it == rule.first and *std::next(it) == rule.second) {
                         *it = rule.first + rule.second;
@@ -301,26 +301,26 @@ std::vector<std::string> tokenizer::tokenize(const std::string& str) const {
     return tokenized_str;
 }
 
-std::vector<size_t> tokenizer::tokens_to_ids(const std::vector<std::string>& tokens) const {
+std::vector<size_t> tok::tokens_to_ids(const std::vector<std::string>& tokens) const {
     std::vector<size_t> ids;
     for (const std::string& str : tokens)
         ids.emplace_back(this->vocab.at(str));
     return ids;
 }
 
-std::vector<std::string> tokenizer::ids_to_tokens(const std::vector<size_t>& ids) const{
+std::vector<std::string> tok::ids_to_tokens(const std::vector<size_t>& ids) const{
     std::vector<std::string> tokens;
     for (const size_t& id : ids)
-        tokens.emplace_back(tokenizer::decode(id));
+        tokens.emplace_back(tok::decode(id));
     return tokens;
 }
 
 template <class Archive>
-void tokenizer::serialize(Archive& archive) {
+void tok::serialize(Archive& archive) {
     archive(leading_white_space, endoftext, normalize_opts, vocab, merges);
 }
 
-void tokenizer::save(const std::string& filename) const {
+void tok::save(const std::string& filename) const {
     std::ofstream ofs(filename, std::ios::binary);
     if (!ofs.is_open()) throw std::runtime_error("Unable to write file: " + filename);
 
@@ -329,7 +329,7 @@ void tokenizer::save(const std::string& filename) const {
     oarchive(*this);
 }
 
-void tokenizer::load(const std::string& filename) {
+void tok::load(const std::string& filename) {
     std::ifstream ifs(filename, std::ios::binary);
     if (!ifs.is_open()) throw std::runtime_error("Unable to read file: " + filename);
 
