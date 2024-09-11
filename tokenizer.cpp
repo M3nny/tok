@@ -147,6 +147,26 @@ void tokenizer::parallel_splits_func(std::vector<std::list<std::string>>& splits
     }
 }
 
+size_t tokenizer::encode(const std::string& str) const {
+    size_t encoded_str = 0;
+    for (char c : str) {
+        // appends each byte of the input string
+        encoded_str = (encoded_str << 8) | static_cast<unsigned char>(c);
+    }
+    return encoded_str;
+}
+
+std::string tokenizer::decode(size_t id) const {
+    std::string result;
+    while (id > 0) {
+        // prepends each byte to the result string
+        char c = static_cast<char>(id & 0xFF);
+        result = c + result;
+        id >>= 8;
+    }
+    return result;
+}
+
 void tokenizer::train_bpe(const std::string& corpus, size_t n_merges, bool is_file_path) {
     std::vector<tokenizer::token> tokens = this->pre_tokenize(corpus, is_file_path);
 
@@ -157,7 +177,7 @@ void tokenizer::train_bpe(const std::string& corpus, size_t n_merges, bool is_fi
 
     splits.reserve(tokens.size());
     seen_tokens.reserve(tokens.size()/4);
-    this->merge_rules.reserve(n_merges);
+    this->merges.reserve(n_merges);
 
     // initialize splits (e.g. "hi" -> "h", "i")
     for (const tokenizer::token& token : tokens) {
@@ -218,14 +238,21 @@ void tokenizer::train_bpe(const std::string& corpus, size_t n_merges, bool is_fi
         this->parallel_splits_func(splits, apply_merge_rule);
 
         // the new merge rule is stored and the byte-pair frequencies are reset
-        if (!new_rule.first.empty() and !new_rule.second.empty())
-            this->merge_rules.push_back(new_rule);
+        if (!new_rule.first.empty() and !new_rule.second.empty()) {
+            std::string new_token = new_rule.first+new_rule.second;
+            this->vocab[new_token] = tokenizer::encode(new_token);
+            this->merges.push_back(new_rule);
+        }
         pairs_freqs.clear();
     }
 }
 
-const std::vector<tokenizer::byte_pair>& tokenizer::get_merge_rules() const {
-    return merge_rules;
+const std::unordered_map<std::string, size_t>& tokenizer::get_vocab() const {
+    return vocab;
+}
+
+const std::vector<tokenizer::byte_pair>& tokenizer::get_merges() const {
+    return merges;
 }
 
 std::vector<std::string> tokenizer::tokenize(const std::string& str) const {
@@ -240,7 +267,7 @@ std::vector<std::string> tokenizer::tokenize(const std::string& str) const {
     const std::function<void(size_t, size_t)> apply_merge_rules = [&](size_t start, size_t end) {
         for (size_t i = start; i < end; i++) {
             std::list<std::string>& split = splits.at(i);
-            for (const tokenizer::byte_pair& rule : this->merge_rules) {
+            for (const tokenizer::byte_pair& rule : this->merges) {
                 for (auto it = split.begin(); std::next(it) != split.end();) {
                     if (*it == rule.first and *std::next(it) == rule.second) {
                         *it = rule.first + rule.second;
@@ -264,7 +291,7 @@ std::vector<std::string> tokenizer::tokenize(const std::string& str) const {
 
 template <class Archive>
 void tokenizer::serialize(Archive& archive) {
-    archive(special_char, normalize_opts, merge_rules);
+    archive(special_char, normalize_opts, vocab, merges);
 }
 
 void tokenizer::save(const std::string& filename) const {

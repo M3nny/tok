@@ -2,10 +2,12 @@
 
 #include <cereal/types/vector.hpp>
 #include <cereal/types/string.hpp>
+#include <cereal/types/unordered_map.hpp>
 #include <cereal/archives/portable_binary.hpp>
 
 #include <vector>
 #include <list>
+#include <unordered_map>
 #include <string>
 #include <iostream>
 #include <functional>
@@ -46,7 +48,8 @@ public:
     std::vector<token> pre_tokenize(const std::string& str, bool is_file_path = false) const;
 
     void train_bpe(const std::string& corpus, size_t n_merges, bool is_file_path = false);
-    const std::vector<byte_pair>& get_merge_rules() const;
+    const std::unordered_map<std::string, size_t>& get_vocab() const;
+    const std::vector<byte_pair>& get_merges() const;
     std::vector<std::string> tokenize(const std::string& str) const;
     void save(const std::string& filename) const;
     void load(const std::string& filename);
@@ -59,8 +62,11 @@ private:
 
     std::list<std::string> string2list(const std::string& str) const;
     void parallel_splits_func(std::vector<std::list<std::string>>& splits, const std::function<void(size_t, size_t)>& func) const;
+    size_t encode(const std::string & str) const;
+    std::string decode(size_t id) const;
 
     std::string special_char;
     size_t normalize_opts;
-    std::vector<byte_pair> merge_rules;
+    std::unordered_map<std::string, size_t> vocab;
+    std::vector<byte_pair> merges;
 };
