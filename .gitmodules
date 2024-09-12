@@ -1,6 +1,0 @@
-[submodule "include/utf8proc"]
-	path = include/utf8proc
-	url = https://github.com/JuliaStrings/utf8proc
-[submodule "include/cereal"]
-	path = include/cereal
-	url = https://github.com/USCiLab/cereal
